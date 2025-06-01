@@ -24,19 +24,12 @@ class StdioServer {
 }
 
 void main() async {
-  // var server = StdioServer(config);
-  var server = StdioServer();
-  List<int> _buffer = []; // Buffer for incoming bytes
+  LSPServer server = LSPServer();
   print('hellama LSP server started. Waiting for messages on stdin...');
 
   // Use a StreamSubscription to handle incoming data chunks
   final stdinSubscription = stdin.listen(
-    (List<int> data) {
-      // Data might come in chunks, so we need to buffer it
-      _buffer.addAll(data);
-      // print(Utf8Codec().decode(_buffer));
-      processIncomingData(_buffer);
-    },
+    server.process,
     onDone: () {
       print('Stdin stream closed. Exiting.');
       exit(0);

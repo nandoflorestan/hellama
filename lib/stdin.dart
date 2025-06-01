@@ -6,34 +6,28 @@ import 'package:hellama/entities.dart';
 
 final List<int> headerEnd = [13, 10, 13, 10]; // \r\n\r\n
 
-/// Helper to find a byte sequence
-int _findSequence(List<int> source, List<int> sequence) {
-  if (sequence.isEmpty) return 0;
-  if (source.length < sequence.length) return -1;
+/// Base class for states of the state machine that processes incoming data.
+abstract class StateProcessorBase {
+  // Data might come in chunks, so we need to buffer it
+  List<int> buffer;
 
-  for (int i = 0; i <= source.length - sequence.length; i++) {
-    bool match = true;
-    for (int j = 0; j < sequence.length; j++) {
-      if (source[i + j] != sequence[j]) {
-        match = false;
-        break;
-      }
-    }
-    if (match) {
-      return i;
-    }
-  }
-  return -1;
+  StateProcessorBase(this.buffer);
+
+  StateProcessorBase? processIncomingData();
 }
 
-void processIncomingData(List<int> buffer) {
-  while (true) {
+/// 1st step: Decode headers, especially the Content-Length.
+class StateFindingContentLength extends StateProcessorBase {
+  StateFindingContentLength(super.buffer);
+
+  @override
+  StateProcessorBase? processIncomingData() {
     // Try to find the end of the headers (\r\n\r\n)
     final headerEndIndex = _findSequence(buffer, headerEnd); // CR LF CR LF
 
     if (headerEndIndex == -1) {
       // Not enough data for headers yet, wait for more
-      break;
+      return null;
     }
 
     // Extract headers
@@ -61,21 +55,30 @@ void processIncomingData(List<int> buffer) {
       );
     }
 
-    // TODO split the function here!
-    // Calculate start of content in buffer
-    final contentStartIndex = headerEndIndex + Header.separator.length;
+    // Remove processed bytes (headers) from the buffer
+    buffer.removeRange(0, headerEndIndex + Header.separator.length);
+    // Return the next state to the state machine
+    return StateReadingContent(buffer, contentLength, headers);
+  }
+}
 
+/// 2nd step: Get JSON content, decode it, run an LSP method.
+class StateReadingContent extends StateProcessorBase {
+  final int contentLength;
+  final Map<String, Header> headers;
+
+  StateReadingContent(super.buffer, this.contentLength, this.headers);
+
+  @override
+  StateProcessorBase? processIncomingData() {
     // Check if we have enough data for the content
-    if (buffer.length < contentStartIndex + contentLength) {
+    if (buffer.length < 0 + contentLength) {
       // Not enough data for the full content, wait for more
-      break;
+      return null;
     }
 
     // Extract content
-    final contentBytes = buffer.sublist(
-      contentStartIndex,
-      contentStartIndex + contentLength,
-    );
+    final contentBytes = buffer.sublist(0, 0 + contentLength);
     final contentString = utf8.decode(contentBytes);
 
     try {
@@ -87,6 +90,39 @@ void processIncomingData(List<int> buffer) {
     }
 
     // Remove processed bytes from the buffer
-    buffer.removeRange(0, contentStartIndex + contentLength);
+    buffer.removeRange(0, contentLength);
+    // Return the next state to the state machine
+    return StateFindingContentLength(buffer);
   }
+}
+
+/// State machine that processes incoming data.
+class LSPServer {
+  StateProcessorBase state = StateFindingContentLength(<int>[]);
+
+  void process(List<int> data) {
+    state.buffer.addAll(data);
+    final newState = state.processIncomingData();
+    if (newState != null) state = newState;
+  }
+}
+
+/// Helper to find a byte sequence
+int _findSequence(List<int> source, List<int> sequence) {
+  if (sequence.isEmpty) return 0;
+  if (source.length < sequence.length) return -1;
+
+  for (int i = 0; i <= source.length - sequence.length; i++) {
+    bool match = true;
+    for (int j = 0; j < sequence.length; j++) {
+      if (source[i + j] != sequence[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) {
+      return i;
+    }
+  }
+  return -1;
 }
