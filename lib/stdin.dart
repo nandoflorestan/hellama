@@ -2,6 +2,7 @@
 import 'dart:convert';
 // import 'dart:io';
 
+import 'package:hellama/app.dart';
 import 'package:hellama/entities.dart';
 
 final List<int> headerEnd = [13, 10, 13, 10]; // \r\n\r\n
@@ -10,18 +11,21 @@ final List<int> headerEnd = [13, 10, 13, 10]; // \r\n\r\n
 abstract class StateProcessorBase {
   // Data might come in chunks, so we need to buffer it
   List<int> buffer;
+  App app;
 
-  StateProcessorBase(this.buffer);
+  StateProcessorBase(this.app, this.buffer);
 
   StateProcessorBase? processIncomingData();
 }
 
 /// 1st step: Decode headers, especially the Content-Length.
 class StateFindingContentLength extends StateProcessorBase {
-  StateFindingContentLength(super.buffer);
+  StateFindingContentLength(super.app, super.buffer);
 
   @override
   StateProcessorBase? processIncomingData() {
+    // app.logger.w("Buffer: " + utf8.decode(buffer));
+
     // Try to find the end of the headers (\r\n\r\n)
     final headerEndIndex = _findSequence(buffer, headerEnd); // CR LF CR LF
 
@@ -39,13 +43,13 @@ class StateFindingContentLength extends StateProcessorBase {
       final Header? header = Header.fromString(line);
       if (header != null) headers[header.key] = header;
     }
+    // app.logger.d("headers: $headers");
 
     final Header? contentLengthHeader = headers['Content-Length'];
     if (contentLengthHeader == null) {
-      print('Error: Content-Length header missing.');
       // This is a protocol violation. Depending on strictness, you might
       // exit or try to recover (though recovery is hard without content-length).
-      throw Exception("Can't proceed without knowing content length!");
+      throw Exception('Error: Content-Length header missing.');
     }
 
     final contentLength = int.tryParse(contentLengthHeader.value);
@@ -54,11 +58,12 @@ class StateFindingContentLength extends StateProcessorBase {
         'Error: Invalid Content-Length header: ${contentLengthHeader.value}',
       );
     }
+    app.logger.d("Content-Length: $contentLength");
 
     // Remove processed bytes (headers) from the buffer
-    buffer.removeRange(0, headerEndIndex + Header.separator.length);
+    buffer.removeRange(0, headerEndIndex + Header.separator.length + 2);
     // Return the next state to the state machine
-    return StateReadingContent(buffer, contentLength, headers);
+    return StateReadingContent(app, buffer, contentLength, headers);
   }
 }
 
@@ -67,43 +72,64 @@ class StateReadingContent extends StateProcessorBase {
   final int contentLength;
   final Map<String, Header> headers;
 
-  StateReadingContent(super.buffer, this.contentLength, this.headers);
+  StateReadingContent(
+    super.app,
+    super.buffer,
+    this.contentLength,
+    this.headers,
+  );
 
   @override
   StateProcessorBase? processIncomingData() {
     // Check if we have enough data for the content
-    if (buffer.length < 0 + contentLength) {
+    if (buffer.length < contentLength) {
       // Not enough data for the full content, wait for more
       return null;
     }
 
     // Extract content
-    final contentBytes = buffer.sublist(0, 0 + contentLength);
+    final contentBytes = buffer.sublist(0, contentLength);
     final contentString = utf8.decode(contentBytes);
+    app.logger.d('Content: $contentString');
 
     try {
-      RequestMessage msg = RequestMessage.fromString(contentString);
-      print(msg);
+      RequestMessage msg = RequestMessage(
+        RequestContent.fromString(contentString),
+      );
+      // app.logger.d('Message: $msg');
       // TODO _handleLspMessage(msg);
     } catch (e) {
-      print('Error decoding JSON content: $e\nContent: "$contentString"');
+      app.logger.e(
+        'Error decoding JSON content: $e\nContent: "$contentString"',
+      );
     }
 
     // Remove processed bytes from the buffer
     buffer.removeRange(0, contentLength);
     // Return the next state to the state machine
-    return StateFindingContentLength(buffer);
+    return StateFindingContentLength(app, buffer);
   }
 }
 
 /// State machine that processes incoming data.
 class LSPServer {
-  StateProcessorBase state = StateFindingContentLength(<int>[]);
+  App app;
+  StateProcessorBase state;
+
+  LSPServer.ctor(this.app, this.state);
+
+  factory LSPServer(App app) {
+    return LSPServer.ctor(app, StateFindingContentLength(app, <int>[]));
+  }
 
   void process(List<int> data) {
+    // app.logger.t("process(data): ${utf8.decode(data)}");
     state.buffer.addAll(data);
-    final newState = state.processIncomingData();
-    if (newState != null) state = newState;
+    var newState = state.processIncomingData();
+    while (newState != null) {
+      state = newState;
+      newState = state.processIncomingData();
+    }
   }
 }
 
