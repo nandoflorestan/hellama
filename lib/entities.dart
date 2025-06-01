@@ -11,10 +11,21 @@ class Header {
 
   @override
   String toString() {
-    return '$key: $value$separator';
+    return '$key$sep$value$separator';
   }
 
+  static String sep = ': ';
   static String separator = '\r\n';
+
+  /// Construct a Header from a string.
+  static Header? fromString(String text) {
+    String line = text.trim();
+    if (line.isEmpty) return null;
+    final parts = line.split(sep); // Alas, split() can return more than 2
+    assert(parts.length > 1); // TODO assert does not run in production
+    String value = line.substring(parts[0].length + sep.length);
+    return Header(parts[0], value);
+  }
 }
 
 /// The content of a request between client and server.
