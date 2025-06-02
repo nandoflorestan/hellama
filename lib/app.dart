@@ -3,6 +3,7 @@ import 'dart:io';
 // https://pub.dev/packages/logger
 import 'package:logger/logger.dart'
     show LogEvent, LogFilter, Logger, SimplePrinter;
+// ignore: implementation_imports
 import 'package:logger/src/outputs/file_output.dart' show FileOutput;
 
 import 'package:hellama/configuration.dart';
@@ -11,8 +12,6 @@ import 'package:hellama/configuration.dart';
 class App {
   final Config config;
   final Logger logger;
-  // TODO method registry
-  // TODO OllamaClient/GPTClient
 
   App._ctor(this.config, this.logger);
 

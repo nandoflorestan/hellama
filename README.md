@@ -1,3 +1,4 @@
+Toy project. Pre-alpha quality.
 This is a work in progress, it does not do anything useful yet.
 Just a personal project to learn the Dart language and libraries.
 But in the future:

@@ -27,9 +27,9 @@ class StateFindingContentLength extends StateProcessorBase {
     // app.logger.w("Buffer: " + utf8.decode(buffer));
 
     // Try to find the end of the headers (\r\n\r\n)
-    final headerEndIndex = _findSequence(buffer, headerEnd); // CR LF CR LF
+    final headerEndIndex = findSequence(buffer, headerEnd); // CR LF CR LF
 
-    if (headerEndIndex == -1) {
+    if (headerEndIndex < 0) {
       // Not enough data for headers yet, wait for more
       return null;
     }
@@ -61,7 +61,10 @@ class StateFindingContentLength extends StateProcessorBase {
     app.logger.d("Content-Length: $contentLength");
 
     // Remove processed bytes (headers) from the buffer
-    buffer.removeRange(0, headerEndIndex + Header.separator.length + 2);
+    // app.logger.d(
+    //   "${utf8.decode(buffer)}\n$buffer\n$headerEndIndex + ${Header.separator.length}",
+    // );
+    buffer.removeRange(0, headerEndIndex + (Header.separator.length * 2));
     // Return the next state to the state machine
     return StateReadingContent(app, buffer, contentLength, headers);
   }
@@ -133,10 +136,14 @@ class LSPServer {
   }
 }
 
-/// Helper to find a byte sequence
-int _findSequence(List<int> source, List<int> sequence) {
-  if (sequence.isEmpty) return 0;
-  if (source.length < sequence.length) return -1;
+/// Helper to find a byte sequence.
+///
+/// Returns -3 if the sought sequence is longer than the source.
+/// Returns -2 if the sought sequence is empty.
+/// Returns -1 if not found.
+int findSequence(List<int> source, List<int> sequence) {
+  if (sequence.isEmpty) return -2;
+  if (source.length < sequence.length) return -3;
 
   for (int i = 0; i <= source.length - sequence.length; i++) {
     bool match = true;

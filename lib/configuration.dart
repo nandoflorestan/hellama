@@ -33,25 +33,29 @@ class Config {
 
 /// Translate config text into an enum value for logger level.
 Level getLoggerLevel(String text) {
-  switch (text.toLowerCase()) {
-    case "all":
-      return Level.all;
-    case "trace":
-      return Level.trace;
-    case "debug":
-      return Level.debug;
-    case "info":
-      return Level.info;
-    case "warning":
-      return Level.warning;
-    case "error":
-      return Level.error;
-    case "fatal":
-      return Level.fatal;
-    case "off":
-      return Level.off;
-    default:
-      return Level.all; // TODO should be warning:
-    // return Level.warning;
+  try {
+    return Level.values.byName(text.toLowerCase());
+  } on ArgumentError {
+    return Level.all; // TODO should be return Level.warning;
   }
+  // switch (text.toLowerCase()) {
+  //   case "all":
+  //     return Level.all;
+  //   case "trace":
+  //     return Level.trace;
+  //   case "debug":
+  //     return Level.debug;
+  //   case "info":
+  //     return Level.info;
+  //   case "warning":
+  //     return Level.warning;
+  //   case "error":
+  //     return Level.error;
+  //   case "fatal":
+  //     return Level.fatal;
+  //   case "off":
+  //     return Level.off;
+  //   default:
+  // return Level.all; // TODO should be warning:
+  // return Level.warning;
 }
